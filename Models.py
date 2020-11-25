@@ -13,21 +13,22 @@ def activation_func(activation):
 
 class LCN(nn.Module):
     def __init__(self, in_channels=1, out_channels=10, h=280, w=280, f=10, ks=28, activation='relu', bias=True):
-        super(LocallyConnected2d, self).__init__()
+        super(LCN, self).__init__()
         self.weight = nn.Parameter(
-            torch.randn(1, f, h*w/ks**2, in_channels, ks, ks)
+            torch.randn(1, h*w//(ks**2)*f, in_channels, ks, ks)
         )
         if bias:
             self.bias = nn.Parameter(
-                torch.randn(1, f, h*w/ks**2, in_channels)
+                torch.randn(1, h*w//(ks**2)*f, in_channels)
             )
         else:
             self.register_parameter('bias', None)
         self.kernel_size = _pair(ks)
         self.stride = _pair(ks)
         self.activation = activation_func(activation)
-        self.decoder = nn.Linear(h*w/ks**2*f, out_channels)
-        
+        self.decoder = nn.Linear(int(h*w/ks**2*f), out_channels)
+        self.in_channels = in_channels
+
     def forward(self, x):
         _, c, h, w = x.size()
         kh, kw = self.kernel_size
@@ -49,11 +50,11 @@ class CNN(nn.Module):
         
         self.conv_block1 = nn.Sequential(
 					nn.Conv2d(in_channels, f, kernel_size = ks, stride = ks, padding = 0, bias=True),
-					#nn.BatchNorm2d(f),
+					nn.BatchNorm2d(f),
 					activation_func(activation)
         )
         
-        self.decoder = nn.Linear(h*w/ks**2*f, out_channels)
+        self.decoder = nn.Linear(h*w//ks**2*f, out_channels)
 
     def forward(self, x):
         x = self.conv_block1(x)
