@@ -12,32 +12,34 @@ def activation_func(activation):
     ])[activation]
 
 class LCN(nn.Module):
-    def __init__(self, in_channels, out_channels, output_size, kernel_size, stride, bias=False):
+    def __init__(self, in_channels=1, out_channels=10, h=280, w=280, f=10, ks=28, activation='relu', bias=True):
         super(LocallyConnected2d, self).__init__()
-        output_size = _pair(output_size)
         self.weight = nn.Parameter(
-            torch.randn(1, out_channels, in_channels, output_size[0], output_size[1], kernel_size**2)
+            torch.randn(1, f, h*w/ks**2, in_channels, ks, ks)
         )
         if bias:
             self.bias = nn.Parameter(
-                torch.randn(1, out_channels, output_size[0], output_size[1])
+                torch.randn(1, f, h*w/ks**2, in_channels)
             )
         else:
             self.register_parameter('bias', None)
-        self.kernel_size = _pair(kernel_size)
-        self.stride = _pair(stride)
+        self.kernel_size = _pair(ks)
+        self.stride = _pair(ks)
+        self.activation = activation_func(activation)
+        self.decoder = nn.Linear(h*w/ks**2*f, out_channels)
         
     def forward(self, x):
         _, c, h, w = x.size()
         kh, kw = self.kernel_size
         dh, dw = self.stride
-        x = x.unfold(2, kh, dh).unfold(3, kw, dw)
-        x = x.contiguous().view(*x.size()[:-2], -1)
-        # Sum in in_channel and kernel_size dims
-        out = (x.unsqueeze(1) * self.weight).sum([2, -1])
+        x = x.unfold(2, kh, dh).unfold(3, kw, dw).reshape(-1,self.in_channels,kh,kw)
+        x = (x * self.weight).sum([-1, -2])
         if self.bias is not None:
-            out += self.bias
-        return out
+            x += self.bias
+        x = self.activation(x)
+        x = x.view(x.size(0),-1)
+        x = self.decoder(x)
+        return x
 
 
 
@@ -46,8 +48,8 @@ class CNN(nn.Module):
         super().__init__()
         
         self.conv_block1 = nn.Sequential(
-					nn.Conv2d(in_channels, f, kernel_size = ks, stride = ks, padding = 0),
-					nn.BatchNorm2d(f),
+					nn.Conv2d(in_channels, f, kernel_size = ks, stride = ks, padding = 0, bias=True),
+					#nn.BatchNorm2d(f),
 					activation_func(activation)
         )
         
