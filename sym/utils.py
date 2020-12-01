@@ -22,14 +22,13 @@ def Augment(imgs):
 class ProgressBar(pl.callbacks.ProgressBar):
     def init_validation_tqdm(self):
         bar = tqdm(
-            desc='Validation sanity check',
-            position=(2 * self.process_position),
+            desc='Validation ...',
+            position=(2 * self.process_position + 1),
             disable=self.is_disabled,
             leave=False,
             dynamic_ncols=True,
             file=sys.stdout,
             ascii=True)
-        bar.set_description('running validation ...')
         return bar
 
     def init_train_tqdm(self) -> tqdm:
@@ -54,21 +53,19 @@ class ProgressBar(pl.callbacks.ProgressBar):
             leave=True,
             dynamic_ncols=True,
             file=sys.stdout,
-            ascii=Truerue
-        )
+            ascii=True)
         return bar
 
     def init_sanity_tqdm(self) -> tqdm:
         """ Override this to customize the tqdm bar for the validation sanity run. """
         bar = tqdm(
             desc='Validation sanity check',
-            position=(2 * self.process_position),
+            position=(2 * self.process_position + 2),
             disable=self.is_disabled,
             leave=False,
             dynamic_ncols=True,
             file=sys.stdout,
-            ascii=True
-        )
+            ascii=True)
         return bar
 
 def Classification_report(model):
