@@ -3,13 +3,17 @@ import pytorch_lightning as pl
 from tqdm import tqdm
 import sys
 from sklearn.metrics import classification_report
+from pytorch_lightning.utilities import rank_zero_only
+from torch.utils.tensorboard.summary import hparams
+from typing import Any, Dict, Optional, Union
+
 
 @torch.jit.script
 def Augment(imgs):
     nums = []
     for img in imgs:
-        i = torch.randint(0,10,(1,)).item()
-        j = torch.randint(0,10,(1,)).item()
+        i = torch.randint(0, 10, (1,)).item()
+        j = torch.randint(0, 10, (1,)).item()
         istart = i * 28
         iend = (i+1) * 28
         jstart = i * 28
@@ -19,11 +23,12 @@ def Augment(imgs):
         nums.append(zeros)
     return torch.stack(nums)
 
+
 class ProgressBar(pl.callbacks.ProgressBar):
     def init_validation_tqdm(self):
         bar = tqdm(
             desc='Validation ...',
-            position=(2 * self.process_position + 1),
+            position=(2 * self.process_position),
             disable=self.is_disabled,
             leave=False,
             dynamic_ncols=True,
@@ -60,13 +65,14 @@ class ProgressBar(pl.callbacks.ProgressBar):
         """ Override this to customize the tqdm bar for the validation sanity run. """
         bar = tqdm(
             desc='Validation sanity check',
-            position=(2 * self.process_position + 2),
+            position=(2 * self.process_position),
             disable=self.is_disabled,
             leave=False,
             dynamic_ncols=True,
             file=sys.stdout,
             ascii=True)
         return bar
+
 
 def Classification_report(model):
     with torch.no_grad():
@@ -82,3 +88,35 @@ def Classification_report(model):
     target = np.concatenate(target)
     out = classification_report(target, pred.argmax(axis=1))
     print(out)
+
+
+class Logger(pl.loggers.TensorBoardLogger):
+    def __init__(self, save_dir: str,
+                 name: Union[str, None] = 'default',
+                 version: Union[int, str, None] = None,
+                 log_graph: bool = False,
+                 default_hp_metric: bool = True,
+                 **kwargs):
+        super().__init__(save_dir, name, version, log_graph, default_hp_metric, **kwargs)
+
+    @rank_zero_only
+    def log_hyperparams(self, params, metrics=None):
+       # store params to output
+        self.hparams.update(params)
+
+        # format params into the suitable for tensorboard
+        params = self._flatten_dict(params)
+        params = self._sanitize_params(params)
+
+        if metrics is None:
+            if self._default_hp_metric:
+                metrics = {"hp_metric": -1}
+        elif not isinstance(metrics, dict):
+            metrics = {"hp_metric": metrics}
+
+        if metrics:
+            exp, ssi, sei = hparams(params, metrics)
+            writer = self.experiment._get_file_writer()
+            writer.add_summary(exp)
+            writer.add_summary(ssi)
+            writer.add_summary(sei)
