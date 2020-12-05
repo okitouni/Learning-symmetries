@@ -65,6 +65,6 @@ class LCN(nn.Module):
         x = self.activation(x)
         x = x.view(x.size(0),-1)
         x = self.decoder(x)
-        if readout_activation is not None: 
-            x = readout_activation(x)
+        if self.readout_activation is not None: 
+            x = self.readout_activation(x)
         return x
