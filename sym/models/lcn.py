@@ -45,7 +45,7 @@ class LCN(nn.Module):
         init.kaiming_uniform_(self.weight, a=sqrt(5))
         if self.bias is not None:
             fan_in, _ = init._calculate_fan_in_and_fan_out(self.weight)
-            bound = 1 / math.sqrt(fan_in)
+            bound = 1 / sqrt(fan_in)
             init.uniform_(self.bias, -bound, bound)
 
     def forward(self, x):
