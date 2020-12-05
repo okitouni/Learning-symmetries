@@ -13,12 +13,12 @@ def activation_func(activation):
 
 
 class LCN(nn.Module):
-    def __init__(self, in_channels=1, out_channels=10, h=280, w=280, f=10, ks=28, s=28, p=0, activation='relu', bias=True):
-        super(LCN, self).__init__()
-        width_span = int((w-ks+2*p)/s) + 1
-        height_span = int((h-ks+2*p)/s) + 1
+    def __init__(self, in_channels=1, out_channels=10, h=280, w=280, nfilters=10, kernel_size=28, stride=28, pad=0, activation='relu', bias=True, readout_activation=None):
+        super().__init__()
+        width_span = int((w-kernel_size+2*pad)/stride) + 1
+        height_span = int((h-kernel_size+2*pad)/stride) + 1
        # self.weight = nn.Parameter(
-       #     (torch.rand(width_span*height_span*f, in_channels, ks, ks)*2-1)*sqrt(in_channels)
+       #     (torch.rand(width_span*height_span*f, in_channels, kernel_size, kernel_size)*2-1)*sqrt(in_channels)
        # )
        # self.weight[width_span*height_span*(f-1):]*=2
        # if bias:
@@ -26,21 +26,22 @@ class LCN(nn.Module):
        #        ( torch.rand(width_span*height_span*f, in_channels)*2-1)*sqrt(in_channels)
        #     )
         self.weight = nn.Parameter(
-            torch.Tensor(width_span*height_span*f, in_channels, ks, ks)
+            torch.Tensor(width_span*height_span*nfilters, in_channels, kernel_size, kernel_size)
         )
         if bias:
             self.bias = nn.Parameter(
-               torch.Tensor(width_span*height_span*f, in_channels)
+               torch.Tensor(width_span*height_span*nfilters, in_channels)
             )
         else:
             self.register_parameter('bias', None)
-        self.kernel_size = _pair(ks)
-        self.stride = _pair(s)
+        self.kernel_size = _pair(kernel_size)
+        self.stride = _pair(stride)
         self.activation = activation_func(activation)
-        self.decoder = nn.Linear(width_span*height_span*f, out_channels)
+        self.decoder = nn.Linear(width_span*height_span*nfilters, out_channels)
         self.in_channels = in_channels
-        self.f = f
-        self.pad = p
+        self.nfilters = nfilters
+        self.pad = pad
+        self.readout_activation = readout_activation
 
     def reset_parameters(self) -> None:
         init.kaiming_uniform_(self.weight, a=math.sqrt(5))
@@ -57,11 +58,13 @@ class LCN(nn.Module):
         x = x.unfold(2, kh, dh)
         x = x.unfold(3, kw, dw)
         x = x.reshape(x.size(0),-1,self.in_channels,kh,kw)
-        x = x.repeat(1,self.f,1,1,1)
+        x = x.repeat(1,self.nfilters,1,1,1)
         x = (x * self.weight).sum([-1, -2])
         if self.bias is not None:
             x += self.bias
         x = self.activation(x)
         x = x.view(x.size(0),-1)
         x = self.decoder(x)
+        if readout_activation is not None: 
+            x = readout_activation(x)
         return x
