@@ -42,9 +42,7 @@ class LCN(nn.Module):
         self.nfilters = nfilters
         self.pad = pad
         self.readout_activation = readout_activation
-
-    def reset_parameters(self) -> None:
-        init.kaiming_uniform_(self.weight, a=math.sqrt(5))
+        init.kaiming_uniform_(self.weight, a=sqrt(5))
         if self.bias is not None:
             fan_in, _ = init._calculate_fan_in_and_fan_out(self.weight)
             bound = 1 / math.sqrt(fan_in)
