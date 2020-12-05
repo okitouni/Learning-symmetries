@@ -1,7 +1,8 @@
 import torch
 import torch.nn as nn
 from torch.nn.modules.utils import _pair
-
+from math import sqrt
+from torch.nn import init
 
 def activation_func(activation):
     return nn.ModuleDict([
@@ -16,13 +17,20 @@ class LCN(nn.Module):
         super(LCN, self).__init__()
         width_span = int((w-ks+2*p)/s) + 1
         height_span = int((h-ks+2*p)/s) + 1
+       # self.weight = nn.Parameter(
+       #     (torch.rand(width_span*height_span*f, in_channels, ks, ks)*2-1)*sqrt(in_channels)
+       # )
+       # self.weight[width_span*height_span*(f-1):]*=2
+       # if bias:
+       #     self.bias = nn.Parameter(
+       #        ( torch.rand(width_span*height_span*f, in_channels)*2-1)*sqrt(in_channels)
+       #     )
         self.weight = nn.Parameter(
-            torch.ones(width_span*height_span*f, in_channels, ks, ks)
+            torch.Tensor(width_span*height_span*f, in_channels, ks, ks)
         )
-        self.weight[width_span*height_span*(f-1):]*=2
         if bias:
             self.bias = nn.Parameter(
-                torch.ones(width_span*height_span*f, in_channels)
+               torch.Tensor(width_span*height_span*f, in_channels)
             )
         else:
             self.register_parameter('bias', None)
@@ -33,6 +41,13 @@ class LCN(nn.Module):
         self.in_channels = in_channels
         self.f = f
         self.pad = p
+
+    def reset_parameters(self) -> None:
+        init.kaiming_uniform_(self.weight, a=math.sqrt(5))
+        if self.bias is not None:
+            fan_in, _ = init._calculate_fan_in_and_fan_out(self.weight)
+            bound = 1 / math.sqrt(fan_in)
+            init.uniform_(self.bias, -bound, bound)
 
     def forward(self, x):
         _, c, h, w = x.size()
