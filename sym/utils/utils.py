@@ -9,13 +9,13 @@ from typing import Any, Dict, Optional, Union
 from math import floor
 
 
-def conv_output_shape(h_w, kernel_size=1, stride=1, pad=0, dilation=1):
+def conv_output_shape(h_w, kernel_size=1, stride=1, padding=0, dilation=1):
     if type(kernel_size) is not tuple:
         kernel_size = (kernel_size, kernel_size)
     h = floor(
-        ((h_w[0] + (2 * pad) - (dilation * (kernel_size[0] - 1)) - 1) / stride) + 1)
+        ((h_w[0] + (2 * padding) - (dilation * (kernel_size[0] - 1)) - 1) / stride) + 1)
     w = floor(
-        ((h_w[1] + (2 * pad) - (dilation * (kernel_size[1] - 1)) - 1) / stride) + 1)
+        ((h_w[1] + (2 * padding) - (dilation * (kernel_size[1] - 1)) - 1) / stride) + 1)
     return h, w
 
 

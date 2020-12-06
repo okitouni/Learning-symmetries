@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from .. import utils
+from collections.abc import Iterable
 conv_output_shape = utils.conv_output_shape
 
 
@@ -14,29 +15,40 @@ def activation_func(activation):
 
 class CNN(nn.Module):
     def __init__(self, in_channels=1, out_channels=10, h=280, w=280, nfilters=10,hidden=None,
-                 kernel_size=28, stride=1, activation='relu', readout_activation=None, *args, **kwargs):
+                 kernel_size=28, stride=1, activation='relu', readout_activation=None,padding=0,bias=True, *args, **kwargs):
         super().__init__()
-        outdim = conv_output_shape(
-            h_w=(h, w), kernel_size=kernel_size, stride=stride)
-        outdim = outdim[0]*outdim[1]
         self.activation = activation_func(activation)
-
-        self.conv_block1 = nn.Sequential(
-            nn.Conv2d(in_channels, nfilters, kernel_size=kernel_size,
-                      stride=stride, padding=0, bias=True),
-            #            nn.BatchNorm2d(nfilters),
-            self.activation
-        )
+        self.readout_activation = readout_activation
+        self.nfilters = nfilters
+        if isinstance(nfilters, Iterable):
+            convlayers = []
+            for nfilters,channels in zip(nfilters,[in_channels,*nfilters]):
+                convlayers.append(nn.Conv2d(channels, nfilters, kernel_size=kernel_size,
+                    stride=stride, padding=padding, bias=bias))
+                #convlayers.append(nn.BatchNorm2d(nfilters))
+                convlayers.append(self.activation)
+                h,w = conv_output_shape(h_w=(h, w), kernel_size=kernel_size, stride=stride,padding=padding)
+            self.conv_blocks = nn.Sequential(*convlayers)
+        else:
+            self.conv_blocks = nn.Sequential(nn.Conv2d(in_channels, nfilters, 
+                kernel_size=kernel_size,stride=stride, padding=0, bias=True),
+                #nn.BatchNorm2d(nfilters),
+                self.activation)
+            h,w = conv_output_shape(h_w=(h, w), kernel_size=kernel_size, stride=stride,padding=padding)
 
         if hidden is not None:
-            self.decoder = nn.Sequential(nn.Linear(outdim*nfilters, hidden),
-                                         self.activation, nn.Linear(hidden, out_channels))
+            if not isinstance(hidden, Iterable): hidden = [hidden]
+            hidden = [h*w*nfilters, *hidden]
+            layers = [] 
+            for i in range(len(hidden)-1):
+                layers.append(nn.Linear(hidden[i], hidden[i+1]))
+                layers.append(self.activation)
+            self.decoder = nn.Sequential(*layers, nn.Linear(hidden[-1], out_channels))
         else:
-            self.decoder = nn.Linear(outdim*nfilters, out_channels)
-        self.readout_activation = readout_activation
+            self.decoder = nn.Linear(h*w*nfilters, out_channels)
 
     def forward(self, x):
-        x = self.conv_block1(x)
+        x = self.conv_blocks(x)
         x = x.view(x.size(0), -1)
         x = self.decoder(x)
         if self.readout_activation is not None:

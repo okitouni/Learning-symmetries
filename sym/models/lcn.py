@@ -4,6 +4,7 @@ from torch.nn.modules.utils import _pair
 from math import sqrt
 from torch.nn import init
 from .. import utils
+from collections.abc import Iterable
 conv_output_shape = utils.conv_output_shape
 
 
@@ -16,26 +17,41 @@ def activation_func(activation):
 
 
 class LCN(nn.Module):
-    def __init__(self, in_channels=1, out_channels=10, h=280, w=280, nfilters=10, kernel_size=28, stride=28, pad=0, activation='relu',
+    def __init__(self, in_channels=1, out_channels=10, h=280, w=280, nfilters=10, kernel_size=28, stride=28, padding=0, activation='relu',
                  bias=True, readout_activation=None, hidden=None):
         super().__init__()
         self.activation = activation_func(activation)
-        self.con2dLocal = nn.Sequential(Conv2d_Local(in_channels=in_channels, h=h, w=w, nfilters=nfilters,
-                                                     kernel_size=kernel_size, stride=stride, pad=pad, bias=bias),
-                                        #                                        nn.BatchNorm2d(nfilters),
-                                        self.activation)
-        height_span, width_span = conv_output_shape(
-            h_w=(h, w), kernel_size=kernel_size, stride=stride)
-        if hidden is not None:
-            self.decoder = nn.Sequential(nn.Linear(width_span*height_span*nfilters, hidden),
-                                         self.activation, nn.Linear(hidden, out_channels))
-        else:
-            self.decoder = nn.Linear(
-                width_span*height_span*nfilters, out_channels)
         self.readout_activation = readout_activation
+        self.nfilters = nfilters
+        if isinstance(nfilters, Iterable):
+            convlayers = []
+            for nfilters,channels in zip(nfilters,[in_channels,*nfilters]):
+                convlayers.append(Conv2d_Local(channels, nfilters, kernel_size=kernel_size,h=h,w=w,
+                    stride=stride, padding=padding, bias=bias))
+                #convlayers.append(nn.BatchNorm2d(nfilters))
+                convlayers.append(self.activation)
+                h,w = conv_output_shape(h_w=(h, w), kernel_size=kernel_size, stride=stride,padding=padding)
+            self.conv_blocks = nn.Sequential(*convlayers)
+        else:
+            self.conv_blocks = nn.Sequential(Conv2d_Local(in_channels, nfilters,h=h,w=w, 
+                kernel_size=kernel_size,stride=stride, padding=0, bias=True),
+                #nn.BatchNorm2d(nfilters),
+                self.activation)
+            h,w = conv_output_shape(h_w=(h, w), kernel_size=kernel_size, stride=stride,padding=padding)
+
+        if hidden is not None:
+            if not isinstance(hidden, Iterable): hidden = [hidden]
+            hidden = [h*w*nfilters, *hidden]
+            layers = [] 
+            for i in range(len(hidden)-1):
+                layers.append(nn.Linear(hidden[i], hidden[i+1]))
+                layers.append(self.activation)
+            self.decoder = nn.Sequential(*layers, nn.Linear(hidden[-1], out_channels))
+        else:
+            self.decoder = nn.Linear(h*w*nfilters, out_channels)
 
     def forward(self, x):
-        x = self.con2dLocal(x)
+        x = self.conv_blocks(x)
         x = x.view(x.size(0), -1)
         x = self.decoder(x)
         if self.readout_activation is not None:
@@ -44,7 +60,7 @@ class LCN(nn.Module):
 
 
 class Conv2d_Local(nn.Module):
-    def __init__(self, in_channels=1, h=280, w=280, nfilters=10, kernel_size=28, stride=28, pad=0, bias=True):
+    def __init__(self, in_channels=1, nfilters=10, h=280, w=280, kernel_size=28, stride=28, padding=0, bias=True):
         super().__init__()
         self.height_span, self.width_span = conv_output_shape(
             h_w=(h, w), kernel_size=kernel_size, stride=stride)
@@ -63,7 +79,7 @@ class Conv2d_Local(nn.Module):
         self.stride = _pair(stride)
         self.in_channels = in_channels
         self.nfilters = nfilters
-        self.pad = pad
+        self.pad = padding
         init.kaiming_uniform_(self.weight, a=sqrt(5))
         if self.bias is not None:
             fan_in, _ = init._calculate_fan_in_and_fan_out(self.weight)
