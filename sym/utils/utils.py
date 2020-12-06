@@ -89,7 +89,6 @@ def Classification_report(model):
     out = classification_report(target, pred.argmax(axis=1))
     print(out)
 
-
 class Logger(pl.loggers.TensorBoardLogger):
     def __init__(self, save_dir: str,
                  name: Union[str, None] = 'default',
@@ -120,3 +119,26 @@ class Logger(pl.loggers.TensorBoardLogger):
             writer.add_summary(exp)
             writer.add_summary(ssi)
             writer.add_summary(sei)
+            
+            
+def projBv(B,v):
+    return torch.matmul(torch.outer(v,v),B)/torch.matmul(v,v)
+
+def Misalignment(A,B):
+    d = A.size(0)
+    evalA,evecA = torch.eig(A,True)
+    M = 0
+    for evec in evecA:
+        tr1 = projBv(B,evec)
+        tr2 = projBv(torch.inverse(B),evec)
+        M += torch.sqrt(torch.trace(tr1)*torch.trace(tr2))
+    return M-d
+
+def Misalignment2(A,B):
+    evalA,evecA = torch.eig(A,True)
+    M = 0
+    for evec in evecA:
+        a = torch.dot(evec,torch.matmul(B,evec))
+        b = torch.dot(evec,torch.matmul(torch.inverse(B),evec))
+        M += torch.sqrt(a*b)
+    return M

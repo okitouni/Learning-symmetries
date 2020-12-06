@@ -4,37 +4,37 @@ import torch.nn as nn
 
 class PIN1(nn.Module):
     
-    def __init__(self, N, width=10):
-        super(PIN1, self).__init__()  
-        self.phi = nn.Sequential(nn.Linear(1,width),
-                                 nn.ReLU(),
-                                 nn.Linear(width,N+1),
+    def __init__(self, N, width=10, ):
+        super(PIN1, self).__init__()
+        self.phi = nn.Sequential(nn.Linear(1,N),
                                  nn.ReLU())
+                                 #nn.Linear(width,N+1),
+                                 #nn.ReLU())
         
-        self.rho1 = nn.Linear(N+1,width)
+        self.rho1 = nn.Linear(N,1)#width)
         self.rho2 = nn.Linear(width,1)
         self.N = N
 
     def forward(self, x):
-        W = torch.zeros((x.size(0),self.N+1))
+        W = torch.zeros((x.size(0),self.N))
         for i in range(len(x[0])):
             W += self.phi(x[:,i].view(-1,1))
         
         x = self.rho1(W)
-        x = nn.ReLU()(x)
-        x = self.rho2(x)
+        #x = nn.ReLU()(x)
+        #x = self.rho2(x)
         return x
     
 class SNN1(nn.Module):
     def __init__(self, N, width=10):
         super(SNN1,self).__init__()
-        self.mlp = torch.nn.Sequential(torch.nn.Linear(N,width),
-																			 torch.nn.ReLU(),
-																			 torch.nn.Linear(width,N+1),
+        self.mlp = torch.nn.Sequential(torch.nn.Linear(N,N),
+                                       #torch.nn.ReLU(),
+                                       #torch.nn.Linear(width,N+1),
                                        torch.nn.ReLU(),
-                                       torch.nn.Linear(N+1,width),
-                                       torch.nn.ReLU(),
-                                       torch.nn.Linear(width,1))
+                                       torch.nn.Linear(N,1))#width),
+                                       #torch.nn.ReLU(),
+                                       #torch.nn.Linear(width,1))
     def forward(self,x):
         x = self.mlp(x)
         return x
