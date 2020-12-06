@@ -15,17 +15,47 @@ def activation_func(activation):
     ])[activation]
 
 
+class LCN(nn.Module):
+    def __init__(self, in_channels=1, out_channels=10, h=280, w=280, nfilters=10, kernel_size=28, stride=28, pad=0, activation='relu',
+                 bias=True, readout_activation=None, hidden=None):
+        super().__init__()
+        self.activation = activation_func(activation)
+        self.con2dLocal = nn.Sequential(Conv2d_Local(in_channels=in_channels, h=h, w=w, nfilters=nfilters,
+                                                     kernel_size=kernel_size, stride=stride, pad=pad, bias=bias),
+                                        #                                        nn.BatchNorm2d(nfilters),
+                                        self.activation)
+        height_span, width_span = conv_output_shape(
+            h_w=(h, w), kernel_size=kernel_size, stride=stride)
+        if hidden is not None:
+            self.decoder = nn.Sequential(nn.Linear(width_span*height_span*nfilters, hidden),
+                                         self.activation, nn.Linear(hidden, out_channels))
+        else:
+            self.decoder = nn.Linear(
+                width_span*height_span*nfilters, out_channels)
+        self.readout_activation = readout_activation
+
+    def forward(self, x):
+        x = self.con2dLocal(x)
+        x = x.view(x.size(0), -1)
+        x = self.decoder(x)
+        if self.readout_activation is not None:
+            x = self.readout_activation(x)
+        return x
+
+
 class Conv2d_Local(nn.Module):
     def __init__(self, in_channels=1, h=280, w=280, nfilters=10, kernel_size=28, stride=28, pad=0, bias=True):
         super().__init__()
-        height_span, width_span = conv_output_shape(h_w=(h, w), kernel_size=kernel_size, stride=stride)
+        self.height_span, self.width_span = conv_output_shape(
+            h_w=(h, w), kernel_size=kernel_size, stride=stride)
         self.weight = nn.Parameter(
-            torch.Tensor(width_span*height_span*nfilters,
+            torch.Tensor(self.width_span*self.height_span*nfilters,
                          in_channels, kernel_size, kernel_size)
         )
         if bias:
             self.bias = nn.Parameter(
-                torch.Tensor(width_span*height_span*nfilters, in_channels)
+                torch.Tensor(self.width_span*self.height_span *
+                             nfilters, in_channels)
             )
         else:
             self.register_parameter('bias', None)
@@ -48,29 +78,10 @@ class Conv2d_Local(nn.Module):
         dh, dw = self.stride
         x = x.unfold(2, kh, dh)
         x = x.unfold(3, kw, dw)
-        x = x.reshape(x.size(0), -1, self.in_channels, kh, kw)
+        x = x.view(x.size(0), -1, self.in_channels, kh, kw)
         x = x.repeat(1, self.nfilters, 1, 1, 1)
         x = (x * self.weight).sum([-1, -2])
         if self.bias is not None:
             x += self.bias
-        return x
-
-
-class LCN(nn.Module):
-    def __init__(self, in_channels=1, out_channels=10, h=280, w=280, nfilters=10, kernel_size=28, stride=28, pad=0, activation='relu', bias=True, readout_activation=None):
-        super().__init__()
-        self.activation = activation_func(activation)
-        self.con2dLocal = Conv2d_Local(in_channels=in_channels, h=h, w=w, nfilters=nfilters,
-                                       kernel_size=kernel_size, stride=stride, pad=pad, bias=bias)
-        height_span, width_span = conv_output_shape(h_w=(h, w), kernel_size=kernel_size, stride=stride)
-        self.decoder = nn.Linear(width_span*height_span*nfilters, out_channels)
-        self.readout_activation = readout_activation
-
-    def forward(self, x):
-        x = self.con2dLocal(x)
-        x = self.activation(x)
-        x = x.view(x.size(0), -1)
-        x = self.decoder(x)
-        if self.readout_activation is not None:
-            x = self.readout_activation(x)
+        x = x.view(-1, self.nfilters, self.height_span, self.width_span)
         return x
