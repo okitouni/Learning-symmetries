@@ -7,19 +7,22 @@ class Model(pl.LightningModule):
     def __init__(self, model, criterion=None, lr=1e-3, optim="Adam",data_cov=None):
         super().__init__()
         self.model = model
-        self.Loss = criterion if criterion is not None else MSE
+        self.Loss = criterion if criterion is not None else MSE(model.out_channels)
         self.optim = optim
-        self.lr = lr
+        self.lr = lr if optim=="Adam" else self.optim.defaults["lr"]
         self.data_cov = data_cov
-        self.hparams["Params"] = sum([x.size().numel()
-                                      for x in self.model.parameters()])
         try:
             nfilters = str(model.nfilters)
         except:
             nfilters = "N/A"
-        self.save_hyperparameters(
-                   {"nfilters": nfilters, "Model": self.model.__repr__().replace("\n", ""),
-                       "lr": lr, "optim": optim.__repr__().replace("\n",""), "loss": self.Loss})
+
+        self.hparams["params"] = sum([x.size().numel()
+                                      for x in self.model.parameters()])
+        self.hparams["nfilters"] = nfilters
+        self.hparams["loss"] = self.Loss
+        self.hparams["optim"] = optim.__repr__().replace("\n","")
+        self.hparams["model"] = self.model.__repr__().replace("\n", "")
+        self.hparams["lr"] = self.lr
 
     def forward(self, x):
         return self.model(x)
@@ -35,7 +38,11 @@ class Model(pl.LightningModule):
         x, y = batch
         yhat = self(x)
         loss = self.Loss(yhat, y)
-        preds = torch.argmax(yhat, dim=1)
+        if self.model.out_channels == 1:
+            preds = torch.sigmoid(yhat.view(-1,1))>.5
+            y = y.view(-1,1)
+        else:
+            preds = torch.argmax(yhat, dim=1)
         acc = accuracy(preds, y)
         # Calling self.log will surface up scalars for you in TensorBoard
         metrics = {'val_loss': loss, 'val_acc': acc}
@@ -73,13 +80,24 @@ class Model(pl.LightningModule):
     def configure_optimizers(self,learning_rate=1e-3):
         if self.optim != "adam":
             optimizer = self.optim
+            for g in optimizer.param_groups:
+                g["lr"] = learning_rate
         else:
             optimizer = torch.optim.Adam(self.model.parameters(), lr=learning_rate)
         return optimizer
 
 
-def MSE(preds, targets):
-    preds = torch.nn.functional.softmax(preds, dim=-1)
-    targets = torch.nn.functional.one_hot(targets, 10)
-    loss = ((preds-targets)**2).mean()
-    return loss
+class MSE():
+    def __init__(self,ntargets):
+        self.ntargets = ntargets
+    def __call__(self,preds,targets):
+        if self.ntargets == 1:
+            preds = torch.sigmoid(preds).view(-1)
+            targets = targets.view(-1)
+        else:
+            preds = torch.nn.functional.softmax(preds, dim=-1)
+            targets = torch.nn.functional.one_hot(targets, self.ntargets)
+        loss = ((preds-targets)**2).mean()
+        return loss
+    def __repr__(self):
+        return f"MSE ntargets{self.ntargets}" 

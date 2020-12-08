@@ -19,6 +19,7 @@ class FCN(nn.Module):
         self.activation = activation_func(activation)
         self.readout_activation = readout_activation
         self.nfilters = nfilters
+        self.out_channels = out_channels 
         if isinstance(nfilters, Iterable):
             mainlayers = []
             for nfilters,channels in zip(nfilters,[in_channels*h*w,*nfilters]):
