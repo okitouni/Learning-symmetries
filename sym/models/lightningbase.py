@@ -1,23 +1,25 @@
 import torch
 import pytorch_lightning as pl
 from pytorch_lightning.metrics.functional import accuracy
-
+from ..utils import utils
 
 class Model(pl.LightningModule):
-    def __init__(self, model, criterion=None, lr=1e-3, optim=None):
+    def __init__(self, model, criterion=None, lr=1e-3, optim="Adam",data_cov=None):
         super().__init__()
         self.model = model
         self.Loss = criterion if criterion is not None else MSE
         self.optim = optim
         self.lr = lr
+        self.data_cov = data_cov
         self.hparams["Params"] = sum([x.size().numel()
                                       for x in self.model.parameters()])
         try:
-            nfilters = model.nfilters
+            nfilters = str(model.nfilters)
         except:
-            nfilters = None
+            nfilters = "N/A"
         self.save_hyperparameters(
-            {"nfilters": nfilters, "Model": self.model.__repr__().replace("\n", "")})
+                   {"nfilters": nfilters, "Model": self.model.__repr__().replace("\n", ""),
+                       "lr": lr, "optim": optim.__repr__().replace("\n",""), "loss": self.Loss})
 
     def forward(self, x):
         return self.model(x)
@@ -54,8 +56,14 @@ class Model(pl.LightningModule):
         val_loss_mean /= len(outputs)
         val_acc_mean /= len(outputs)
         metrics = {'val_loss': val_loss_mean, 'val_acc': val_acc_mean}
-#         self.log_dict(metrics, prog_bar=True,logger=True,on_epoch=True,on_step=False)
-#         self.logger.log_hyperparams(self.hparams,metrics=metrics)
+
+        if self.data_cov is not None:
+            filters = next(self.model.parameters()).detach().cpu()
+            cov_filters = utils.cov_matrix(filters)
+            misalignment = utils.Misalignment2(self.data_cov,cov_filters)
+            metrics["misalignment"] = misalignment
+        self.log_dict(metrics, prog_bar=True,logger=True,on_epoch=True,on_step=False)
+        self.logger.log_hyperparams(self.hparams,metrics=metrics)
         return
 
     def test_step(self, batch, batch_idx):
@@ -63,7 +71,7 @@ class Model(pl.LightningModule):
         return self.validation_step(batch, batch_idx)
 
     def configure_optimizers(self,learning_rate=1e-3):
-        if self.optim is not None:
+        if self.optim != "adam":
             optimizer = self.optim
         else:
             optimizer = torch.optim.Adam(self.model.parameters(), lr=learning_rate)

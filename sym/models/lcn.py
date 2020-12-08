@@ -94,7 +94,7 @@ class Conv2d_Local(nn.Module):
         dh, dw = self.stride
         x = x.unfold(2, kh, dh)
         x = x.unfold(3, kw, dw)
-        x = x.view(x.size(0), -1, self.in_channels, kh, kw)
+        x = x.reshape(x.size(0), -1, self.in_channels, kh, kw)
         x = x.repeat(1, self.nfilters, 1, 1, 1)
         x = (x * self.weight).sum([-1, -2])
         if self.bias is not None:

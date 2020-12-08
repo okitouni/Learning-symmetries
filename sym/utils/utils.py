@@ -7,6 +7,7 @@ from pytorch_lightning.utilities import rank_zero_only
 from torch.utils.tensorboard.summary import hparams
 from typing import Any, Dict, Optional, Union
 from math import floor
+import numpy as np
 
 
 def conv_output_shape(h_w, kernel_size=1, stride=1, padding=0, dilation=1):
@@ -151,5 +152,19 @@ def Misalignment2(A,B):
     for evec in evecA:
         a = torch.dot(evec,torch.matmul(B,evec))
         b = torch.dot(evec,torch.matmul(torch.inverse(B),evec))
-        M += torch.sqrt(a*b)
+        M += torch.sqrt(a*b) - 1
     return M
+
+def cov_matrix(filters):
+    if filters.ndim != 2:
+        filters = filters.reshape(filters.shape[0],-1)
+    if type(filters) == np.ndarray:
+        cov_filters = np.matmul(filters.T,filters)
+    elif type(filters) == torch.Tensor:
+        cov_filters = torch.matmul(filters.T,filters)
+    else:
+        raise ValuerError("Input must be tensor or ndarray")
+    return cov_filters
+
+def minmaxnorm(x):
+    return (x-x.min())/(x.max()-x.min())
