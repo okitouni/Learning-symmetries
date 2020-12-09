@@ -4,12 +4,16 @@ from pytorch_lightning.metrics.functional import accuracy
 from ..utils import utils
 
 class Model(pl.LightningModule):
-    def __init__(self, model, criterion=None, lr=1e-3, optim="Adam",data_cov=None):
+    def __init__(self, model, criterion=None, lr=1e-3, optim="Adam",data_cov=None,zeroparams=None):
         super().__init__()
         self.model = model
         self.Loss = criterion if criterion is not None else MSE(model.out_channels)
         self.optim = optim
-        self.lr = lr if optim=="Adam" else self.optim.defaults["lr"]
+        self.zeroparams = zeroparams
+        if optim == "Adam":
+            self.lr = lr
+        else:
+            self.lr = self.optim.defaults["lr"]
         self.data_cov = data_cov
         try:
             nfilters = str(model.nfilters)
@@ -32,6 +36,8 @@ class Model(pl.LightningModule):
         yhat = self(x)
         loss = self.Loss(yhat, y)
         self.log('train_loss', loss)
+        if self.zeroparams is not None:
+            self.log("zero_params", sum([torch.sum(abs(g)<self.zeroparams)  for g in self.model.parameters()]))
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -39,7 +45,10 @@ class Model(pl.LightningModule):
         yhat = self(x)
         loss = self.Loss(yhat, y)
         if self.model.out_channels == 1:
-            preds = torch.sigmoid(yhat.view(-1,1))>.5
+            if self.model.readout_activation is None:
+                preds = torch.sigmoid(yhat.view(-1,1))>.5
+            else:
+                preds = yhat.view(-1,1)>.5
             y = y.view(-1,1)
         else:
             preds = torch.argmax(yhat, dim=1)
@@ -69,6 +78,8 @@ class Model(pl.LightningModule):
             cov_filters = utils.cov_matrix(filters)
             misalignment = utils.Misalignment2(self.data_cov,cov_filters)
             metrics["misalignment"] = misalignment
+        if self.zeroparams is not None:
+            metrics["zero_params"] = sum([torch.sum(abs(g)<self.zeroparams)  for g in self.model.parameters()])
         self.log_dict(metrics, prog_bar=True,logger=True,on_epoch=True,on_step=False)
         self.logger.log_hyperparams(self.hparams,metrics=metrics)
         return

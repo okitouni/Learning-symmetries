@@ -1,6 +1,9 @@
 data/*.pt
+data/run*
+data/cifar*
 lightning_logs/
 .old/*
+*.swp
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

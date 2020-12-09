@@ -21,15 +21,19 @@ def conv_output_shape(h_w, kernel_size=1, stride=1, padding=0, dilation=1):
 
 
 @torch.jit.script
-def Augment(imgs):
+def Augment(imgs,diag:bool=False):
     nums = []
     for img in imgs:
         i = torch.randint(0, 10, (1,)).item()
         j = torch.randint(0, 10, (1,)).item()
         istart = i * 28
         iend = (i+1) * 28
-        jstart = j * 28
-        jend = (j+1) * 28
+        if diag:
+            jstart = istart
+            jend = iend
+        else:
+            jstart = j * 28
+            jend = (j+1) * 28
         zeros = torch.zeros(280, 280)
         zeros[istart:iend, jstart:jend] = img
         nums.append(zeros)

@@ -14,12 +14,16 @@ def activation_func(activation):
 
 class FCN(nn.Module):
     def __init__(self, in_channels=1, out_channels=10, h=280, w=280, nfilters=10,hidden=None,
-                 kernel_size=28, stride=1, activation='relu', readout_activation=None,padding=0,bias=True, *args, **kwargs):
+                 kernel_size=28, stride=1, activation='relu', readout_activation=None,
+                 padding=0,bias=True, invar_reduction = None, *args, **kwargs):
         super().__init__()
         self.activation = activation_func(activation)
         self.readout_activation = readout_activation
         self.nfilters = nfilters
         self.out_channels = out_channels 
+        if invar_reduction is not None:
+            raise ValueError("invariance reductions is not implemented yet for FCN. Set invar_reduction to None.")
+        self.invar_reduction = invar_reduction 
         if isinstance(nfilters, Iterable):
             mainlayers = []
             for nfilters,channels in zip(nfilters,[in_channels*h*w,*nfilters]):
@@ -35,6 +39,13 @@ class FCN(nn.Module):
                 self.activation)
 #            h,w = conv_output_shape(h_w=(h, w), kernel_size=kernel_size, stride=stride,padding=padding)
 
+        if invar_reduction == "max":
+            self.reduction = torch.nn.AdaptiveMaxPool2d((1,1))
+            h,w = 1,1
+        elif invar_reduction == "mean":
+            self.reduction = torch.nn.AdaptiveAvgPool2d((1,1))
+            h,w = 1,1
+
         if hidden is not None:
             if not isinstance(hidden, Iterable): hidden = [hidden]
             hidden = [nfilters, *hidden]
@@ -44,11 +55,13 @@ class FCN(nn.Module):
                 layers.append(self.activation)
             self.decoder = nn.Sequential(*layers, nn.Linear(hidden[-1], out_channels))
         else:
-            self.decoder = nn.Linear(h*w*nfilters, out_channels)
+            self.decoder = nn.Linear(nfilters, out_channels)
 
     def forward(self, x):
         x = x.flatten(1)
         x = self.main_blocks(x)
+        if self.invar_reduction is not None:
+            x = self.reduction(x)
         x = x.view(x.size(0), -1)
         x = self.decoder(x)
         if self.readout_activation is not None:
